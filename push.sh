@@ -34,5 +34,4 @@ git commit -m "Refresh image set with lowercase .jpg files"
 echo "🚀 Pushing to remote..."
 git push origin main
 
-echo "✅ All done. Please use --> https://raw.githubusercontent.com/CineDivas/host/main/*.jpg"
-
+echo "✅ All done. Please use --> https://raw.githubusercontent.com/CineDivas/host/main/s1.jpg"
