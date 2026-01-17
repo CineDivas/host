@@ -1,52 +1,141 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -e
 
-# Directories
-SRC_DIR="/mnt/c/Users/91814/Downloads"
-DEST_DIR="/mnt/d/Kali-Linux/Wsl/host"
+####################################
+# CONFIG
+####################################
+SRC="/mnt/c/Users/91814/Downloads"
+DEST="/mnt/d/Kali-Linux/Wsl/host"
+BRANCH="main"
+COMMIT_MSG="Refresh image set with lowercase .jpg files"
 
-# Windows Recycle Bin path (applies to all drives)
-RECYCLE_BIN="/mnt/c/\$Recycle.Bin"
+####################################
+# ENV DETECTION
+####################################
+INTERACTIVE=true
+[[ ! -t 1 ]] && INTERACTIVE=false
 
-# Step 1: Remove existing .jpg files in destination
-echo "🧹 Removing existing .jpg files in $DEST_DIR..."
-find "$DEST_DIR" -type f -iname "*.jpg" -delete
+####################################
+# COLORS
+####################################
+RESET="\e[0m"
+CYAN="\e[36m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+RED="\e[31m"
+MAGENTA="\e[35m"
 
-# Step 2: Find image files and move them as .jpg
-echo "📦 Moving image files from $SRC_DIR to $DEST_DIR (renamed with .jpg)..."
+####################################
+# ANIMATIONS
+####################################
 
-find "$SRC_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | while read -r file; do
-    filename=$(basename "$file")
-    name_no_ext="${filename%.*}"
-    newname="${name_no_ext}.jpg"
+sleep_if() { $INTERACTIVE && sleep "$1"; }
 
-    echo "Moving: $filename -> $newname"
-    mv "$file" "$DEST_DIR/$newname" || echo "❌ Failed to move: $file"
-done
+typewriter() {
+  $INTERACTIVE || { echo "$1"; return; }
+  for ((i=0;i<${#1};i++)); do
+    printf "%s" "${1:$i:1}"
+    sleep 0.02
+  done
+  echo
+}
 
-# Step 3: Git commit and push
-cd "$DEST_DIR" || { echo "❌ Failed to cd into $DEST_DIR"; exit 1; }
+banner() {
+  $INTERACTIVE || return
+  clear
+  local b=(
+" ██████╗ ██╗███╗   ██╗███████╗"
+"██╔════╝ ██║████╗  ██║██╔════╝"
+"██║  ███╗██║██╔██╗ ██║█████╗  "
+"██║   ██║██║██║╚██╗██║██╔══╝  "
+"╚██████╔╝██║██║ ╚████║███████╗"
+" ╚═════╝ ╚═╝╚═╝  ╚═══╝╚══════╝"
+"      CineDivas Image Uploader"
+  )
+  for l in "${b[@]}"; do
+    echo -e "${CYAN}$l${RESET}"
+    sleep 0.06
+  done
+  echo
+}
 
-echo "📂 Adding changes to git..."
-git add .
+pulse() {
+  $INTERACTIVE || return
+  for c in "$CYAN" "$MAGENTA" "$GREEN"; do
+    echo -ne "${c}$1${RESET}\r"
+    sleep 0.15
+  done
+  echo -e "$1"
+}
 
-echo "📝 Committing changes..."
-git commit -m "Refresh image set with lowercase .jpg files"
+progress() {
+  $INTERACTIVE || return
+  local i
+  for i in {1..20}; do
+    printf "\r${GREEN}Loading [%-20s]${RESET}" "$(printf '█%.0s' $(seq 1 $i))"
+    sleep 0.03
+  done
+  echo
+}
 
-echo "🚀 Pushing to remote..."
-git push origin main
+spinner() {
+  local pid=$1
+  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) % ${#spin} ))
+    printf "\r${CYAN}⚡ Working ${spin:$i:1}${RESET}"
+    sleep 0.1
+  done
+  printf "\r${GREEN}✅ Done${RESET}           \n"
+}
 
-# Step 4: FINAL CLEANUP – delete all .jpg files in destination
-echo "🔥 Final cleanup: deleting all .jpg files in $DEST_DIR..."
-find "$DEST_DIR" -type f -iname "*.jpg" -delete
+####################################
+# START
+####################################
 
-# Step 5: Clean .jpg files from Windows Recycle Bin
-if [ -d "$RECYCLE_BIN" ]; then
-    echo "🗑️ Cleaning .jpg files from Windows Recycle Bin..."
-    find "$RECYCLE_BIN" -type f -iname "*.jpg" -delete
+banner
+pulse "🚀 Initializing CineDivas pipeline..."
+progress
+
+typewriter "🧹 Cleaning old images..."
+rm -f "$DEST"/*.jpg 2>/dev/null || true
+
+typewriter "📦 Moving new images..."
+(
+  shopt -s nullglob
+  for f in "$SRC"/*.{jpg,JPG,jpeg,JPEG,png,PNG}; do
+    base=$(basename "$f")
+    mv "$f" "$DEST/${base%.*}.jpg"
+  done
+) & spinner $!
+
+cd "$DEST"
+
+typewriter "📂 Git add..."
+git add . >/dev/null 2>&1
+
+typewriter "📝 Git commit..."
+git commit -m "$COMMIT_MSG" >/dev/null 2>&1 || true
+
+typewriter "🚀 Pushing to GitHub..."
+if git push origin "$BRANCH" >/dev/null 2>&1; then
+  echo -e "${GREEN}✅ Push successful${RESET}"
 else
-    echo "⚠️ Recycle Bin path not found, skipping..."
+  echo -e "${RED}❌ Push failed — files kept${RESET}"
+  exit 1
 fi
 
-echo "✅ All done."
-echo "➡️ Use: https://raw.githubusercontent.com/CineDivas/host/main/s1.jpg"
+typewriter "🔥 Final cleanup..."
+rm -f "$DEST"/*.jpg 2>/dev/null || true
+
+FIRST=$(git show --name-only --pretty="" | head -n 1)
+
+echo
+pulse "✨ All tasks completed!"
+echo -e "${CYAN}➡️ Image URL:${RESET}"
+echo "https://raw.githubusercontent.com/CineDivas/host/main/s1.jpg"
+
+echo
+typewriter "🎬 CineDivas — Upload Complete"
 
